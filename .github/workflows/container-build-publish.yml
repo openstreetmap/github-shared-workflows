@@ -35,7 +35,7 @@ on:
         type: number
 
 jobs:
-  container-build:
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -52,6 +52,12 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
             type=raw,value=latest,enable={{is_default_branch}}
+          labels: |
+            maintainer=OpenStreetMap Contributors
+            org.opencontainers.image.description=${{ github.event.repository.description }}
+          annotations: |
+            maintainer=OpenStreetMap Contributors
+            org.opencontainers.image.description=${{ github.event.repository.description }}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3

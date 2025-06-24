@@ -130,7 +130,8 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ inputs.registry }}/${{ inputs.image_name }}
+          images: |
+            ${{ inputs.registry }}/${{ inputs.image_name }}
           tags: |
             type=ref,event=branch
             type=semver,pattern={{version}}
@@ -154,10 +155,10 @@ jobs:
         run: |
           docker buildx imagetools inspect ${{ inputs.registry }}/${{ inputs.image_name }}:${{ steps.meta.outputs.version }}
 
-      - uses: actions/delete-package-versions@v5
-        if: ${{ github.event_name != 'pull_request' }}
-        with:
-          package-name: ${{ github.event.repository.name }}
-          package-type: container
-          min-versions-to-keep: ${{ inputs.min_versions_to_keep }}
-          delete-only-untagged-versions: true
+      # - uses: actions/delete-package-versions@v5
+      #   if: ${{ github.event_name != 'pull_request' }}
+      #   with:
+      #     package-name: ${{ github.event.repository.name }}
+      #     package-type: container
+      #     min-versions-to-keep: ${{ inputs.min_versions_to_keep }}
+      #     delete-only-untagged-versions: true

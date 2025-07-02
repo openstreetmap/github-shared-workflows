@@ -69,7 +69,7 @@ jobs:
 
       - name: Set normalised image name
         run: |
-          repo_image=$(jq -r '.tags[0]' <<< "$DOCKER_METADATA_OUTPUT_JSON")
+          repo_image=$(jq -r '.tags[0]' <<< "$DOCKER_METADATA_OUTPUT_JSON" | cut -d: -f1)
           echo "REPO_IMAGE=$repo_image" >>${GITHUB_ENV}
 
       - name: Login to Container Registry
@@ -156,7 +156,7 @@ jobs:
 
       - name: Set normalised image name
         run: |
-          repo_image=$(jq -r '.tags[0]' <<< "$DOCKER_METADATA_OUTPUT_JSON")
+          repo_image=$(jq -r '.tags[0]' <<< "$DOCKER_METADATA_OUTPUT_JSON" | cut -d: -f1)
           echo "REPO_IMAGE=$repo_image" >>${GITHUB_ENV}
 
       - name: Create manifest list and push

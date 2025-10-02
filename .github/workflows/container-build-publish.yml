@@ -58,6 +58,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Get Git commit timestamps
+        run: echo "GIT_COMMIT_TIMESTAMP=$(git log -1 --pretty=%ct)" >> $GITHUB_ENV
+
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v5
@@ -99,6 +102,8 @@ jobs:
           outputs: type=image,push-by-digest=true,name-canonical=true,push=${{ github.event_name != 'pull_request' }}
           cache-from: type=gha,scope=${{ inputs.image_name }}-${{ env.PLATFORM_PAIR }}
           cache-to: type=gha,mode=max,scope=${{ inputs.image_name }}-${{ env.PLATFORM_PAIR }}
+        env:
+          SOURCE_DATE_EPOCH: ${{ env.GIT_COMMIT_TIMESTAMP }}
 
       - name: Export digest
         run: |

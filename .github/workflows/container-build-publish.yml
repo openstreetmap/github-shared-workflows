@@ -37,7 +37,7 @@ on:
 jobs:
   build:
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         include:
           - platform: linux/amd64
@@ -45,6 +45,7 @@ jobs:
           - platform: linux/arm64
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner || 'ubuntu-24.04' }}
+    continue-on-error: false
     permissions:
       contents: read
       packages: write

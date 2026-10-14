@@ -173,8 +173,12 @@ jobs:
 
       - name: Create manifest list and push
         working-directory: ${{ runner.temp }}/digests
+        env:
+          IMAGE_DESCRIPTION: ${{ github.event.repository.description }}
         run: |
-          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+          docker buildx imagetools create \
+            --annotation "index:org.opencontainers.image.description=${IMAGE_DESCRIPTION}" \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
             $(printf '${{ env.REPO_IMAGE }}@sha256:%s ' *)
 
       - name: Inspect image

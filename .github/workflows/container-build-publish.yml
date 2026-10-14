@@ -150,6 +150,8 @@ jobs:
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v6
+        env:
+          DOCKER_METADATA_ANNOTATIONS_LEVELS: index
         with:
           images: |
             ${{ inputs.registry }}/${{ inputs.image_name }}
@@ -173,11 +175,10 @@ jobs:
 
       - name: Create manifest list and push
         working-directory: ${{ runner.temp }}/digests
-        env:
-          IMAGE_DESCRIPTION: ${{ github.event.repository.description }}
         run: |
+          description_annotation=$(jq -er '.annotations[] | select(startswith("index:org.opencontainers.image.description="))' <<< "$DOCKER_METADATA_OUTPUT_JSON")
           docker buildx imagetools create \
-            --annotation "index:org.opencontainers.image.description=${IMAGE_DESCRIPTION}" \
+            --annotation "$description_annotation" \
             $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
             $(printf '${{ env.REPO_IMAGE }}@sha256:%s ' *)
 

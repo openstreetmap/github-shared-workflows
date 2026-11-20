@@ -5,191 +5,52 @@ on:
     inputs:
       dockerfile:
         description: 'Dockerfile path'
-        required: false
         default: Dockerfile
         type: string
       context:
-        description: 'Build context'
-        required: false
+        description: 'Build context path in the Git repository'
         default: .
         type: string
-      platforms:
-        description: 'Target platforms'
-        required: false
-        default: linux/amd64,linux/arm64
-        type: string
-      registry:
-        description: 'Container registry'
-        required: false
-        default: ghcr.io
-        type: string
       image_name:
-        description: 'Image name'
-        required: false
+        description: 'GHCR image name, including the namespace'
         default: ${{ github.repository }}
         type: string
-      min_versions_to_keep:
-        description: 'Minimum versions to keep for package deletion'
-        required: false
-        default: 60 # Ensure large enough for multi-platform manifest images. Minimum is likely 6
-        type: number
 
 jobs:
   build:
-    strategy:
-      fail-fast: true
-      matrix:
-        include:
-          - platform: linux/amd64
-            runner: ubuntu-24.04
-          - platform: linux/arm64
-            runner: ubuntu-24.04-arm
-    runs-on: ${{ matrix.runner || 'ubuntu-24.04' }}
-    continue-on-error: false
+    uses: docker/github-builder/.github/workflows/build.yml@a31d2311da4d55e21b978c1c52bab82ba97d51ee # v1.19.0
     permissions:
       contents: read
       packages: write
-
-    steps:
-      - name: Prepare
-        run: |
-          platform=${{ matrix.platform }}
-          echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV
-
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Get Git commit timestamps
-        run: echo "GIT_COMMIT_TIMESTAMP=$(git log -1 --pretty=%ct)" >> $GITHUB_ENV
-
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ inputs.registry }}/${{ inputs.image_name }}
-          labels: |
-            maintainer=OpenStreetMap Contributors
-            org.opencontainers.image.description=${{ github.event.repository.description }}
-          annotations: |
-            maintainer=OpenStreetMap Contributors
-            org.opencontainers.image.description=${{ github.event.repository.description }}
-
-      - name: Set normalised image name
-        run: |
-          repo_image=$(jq -r '.tags[0]' <<< "$DOCKER_METADATA_OUTPUT_JSON" | cut -d: -f1)
-          echo "REPO_IMAGE=$repo_image" >>${GITHUB_ENV}
-
-      - name: Login to Container Registry
-        if: github.event_name != 'pull_request'
-        uses: docker/login-action@v4
-        with:
-          registry: ${{ inputs.registry }}
+    with:
+      file: ${{ inputs.dockerfile }}
+      context: ${{ inputs.context }}
+      output: image
+      distribute: true
+      fail-fast: true
+      platforms: linux/amd64,linux/arm64
+      push: ${{ !startsWith(github.event_name, 'pull_request') }}
+      sbom: ${{ !startsWith(github.event_name, 'pull_request') }}
+      # Keep provenance and SBOMs without requiring callers to grant id-token: write.
+      sign: 'false'
+      cache: true
+      cache-mode: max
+      cache-scope: ${{ inputs.image_name }}
+      build-args: SOURCE_DATE_EPOCH=context
+      meta-images: ghcr.io/${{ inputs.image_name }}
+      meta-flavor: latest=false
+      meta-tags: |
+        type=ref,event=branch,prefix=${{ github.ref_name == 'latest' && 'branch-' || '' }}
+        type=semver,pattern={{version}}
+        type=semver,pattern={{major}}.{{minor}}
+        type=semver,pattern={{major}}
+        # The metadata helper also returns true for create events on other branches.
+        type=raw,value=latest,enable=${{ github.ref_type == 'branch' && github.event_name != 'create' && '{{is_default_branch}}' || 'false' }}
+      set-meta-labels: true
+      set-meta-annotations: true
+      meta-labels: maintainer=OpenStreetMap Contributors
+    secrets:
+      registry-auths: |
+        - registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Build and push by digest
-        id: build
-        uses: docker/build-push-action@v7
-        with:
-          context: ${{ inputs.context }}
-          file: ${{ inputs.dockerfile }}
-          platforms: ${{ matrix.platform }}
-          tags: ${{ env.REPO_IMAGE }}
-          labels: ${{ steps.meta.outputs.labels }}
-          annotations: ${{ steps.meta.outputs.annotations }}
-          outputs: type=image,push-by-digest=true,name-canonical=true,push=${{ github.event_name != 'pull_request' }}
-          cache-from: type=gha,scope=${{ inputs.image_name }}-${{ env.PLATFORM_PAIR }}
-          cache-to: type=gha,mode=max,scope=${{ inputs.image_name }}-${{ env.PLATFORM_PAIR }}
-          build-args: |
-            SOURCE_DATE_EPOCH=${{ env.GIT_COMMIT_TIMESTAMP }}
-
-        env:
-          SOURCE_DATE_EPOCH: ${{ env.GIT_COMMIT_TIMESTAMP }}
-
-      - name: Export digest
-        run: |
-          mkdir -p ${{ runner.temp }}/digests
-          digest="${{ steps.build.outputs.digest }}"
-          touch "${{ runner.temp }}/digests/${digest#sha256:}"
-
-      - name: Upload digest
-        uses: actions/upload-artifact@v7
-        with:
-          name: digests-${{ env.PLATFORM_PAIR }}
-          path: ${{ runner.temp }}/digests/*
-          if-no-files-found: error
-          retention-days: 1
-
-  merge:
-    runs-on: ubuntu-latest
-    if: ${{ github.event_name != 'pull_request' }}
-    needs:
-      - build
-    steps:
-      - name: Download digests
-        uses: actions/download-artifact@v8
-        with:
-          path: ${{ runner.temp }}/digests
-          pattern: digests-*
-          merge-multiple: true
-
-      - name: Login to Container Registry
-        if: github.event_name != 'pull_request'
-        uses: docker/login-action@v4
-        with:
-          registry: ${{ inputs.registry }}
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@v6
-        env:
-          DOCKER_METADATA_ANNOTATIONS_LEVELS: index
-        with:
-          images: |
-            ${{ inputs.registry }}/${{ inputs.image_name }}
-          tags: |
-            type=ref,event=branch
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=raw,value=latest,enable={{is_default_branch}}
-          labels: |
-            maintainer=OpenStreetMap Contributors
-            org.opencontainers.image.description=${{ github.event.repository.description }}
-          annotations: |
-            maintainer=OpenStreetMap Contributors
-            org.opencontainers.image.description=${{ github.event.repository.description }}
-
-      - name: Set normalised image name
-        run: |
-          repo_image=$(jq -r '.tags[0]' <<< "$DOCKER_METADATA_OUTPUT_JSON" | cut -d: -f1)
-          echo "REPO_IMAGE=$repo_image" >>${GITHUB_ENV}
-
-      - name: Create manifest list and push
-        working-directory: ${{ runner.temp }}/digests
-        run: |
-          description_annotation=$(jq -er '.annotations[] | select(startswith("index:org.opencontainers.image.description="))' <<< "$DOCKER_METADATA_OUTPUT_JSON")
-          docker buildx imagetools create \
-            --annotation "$description_annotation" \
-            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ env.REPO_IMAGE }}@sha256:%s ' *)
-
-      - name: Inspect image
-        run: |
-          docker buildx imagetools inspect ${{ env.REPO_IMAGE }}:${{ steps.meta.outputs.version }}
-
-      - uses: actions/delete-package-versions@v5
-        if: ${{ github.event_name != 'pull_request' }}
-        with:
-          package-name: ${{ github.event.repository.name }} # FIXME: These needs to change to image name
-          package-type: container
-          min-versions-to-keep: ${{ inputs.min_versions_to_keep }}
-          delete-only-untagged-versions: true

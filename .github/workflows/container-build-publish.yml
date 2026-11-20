@@ -22,6 +22,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write
     with:
       file: ${{ inputs.dockerfile }}
       context: ${{ inputs.context }}
@@ -31,8 +32,7 @@ jobs:
       platforms: linux/amd64,linux/arm64
       push: ${{ !startsWith(github.event_name, 'pull_request') }}
       sbom: ${{ !startsWith(github.event_name, 'pull_request') }}
-      # Keep provenance and SBOMs without requiring callers to grant id-token: write.
-      sign: 'false'
+      sign: auto
       cache: true
       cache-mode: max
       cache-scope: ${{ inputs.image_name }}

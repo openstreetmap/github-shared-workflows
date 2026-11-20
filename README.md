@@ -10,13 +10,16 @@ Workflows are in folder `.github/workflows/`
 uses Docker's GitHub Builder to build `linux/amd64` and `linux/arm64` on native
 runners and publish a single multi-platform image. Pull requests build both
 platforms without publishing. Published images include OCI metadata, BuildKit
-provenance, and an SPDX SBOM for each platform's final image. The workflow does
-not sign attestations or delete image versions.
+provenance, and an SPDX SBOM for each platform's final image. Docker's GitHub
+Builder signs the attestations using GitHub OIDC, not the final multi-platform
+image index. The workflow does not delete image versions.
 
 The workflow publishes to `ghcr.io/<owner>/<repository>` by default. Give the
-calling job `contents: read` and `packages: write` so it can publish using
-`GITHUB_TOKEN`. Use `dockerfile` and `context` to select files from the triggering
-commit, or `image_name` to publish under a different GHCR image name.
+calling job `contents: read`, `packages: write` (to publish using `GITHUB_TOKEN`),
+and `id-token: write` (to sign attestations). Update existing callers before
+rolling out the shared workflow with signing enabled. Use `dockerfile` and
+`context` to select files from the triggering commit, or `image_name` to publish
+under a different GHCR image name.
 
 Branch builds publish a branch tag. Only default-branch builds update `latest`,
 including scheduled rebuilds. A non-default branch named `latest` publishes as
